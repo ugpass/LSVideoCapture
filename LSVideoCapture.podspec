@@ -6,7 +6,7 @@ Pod::Spec.new do |spec|
   spec.license      = "MIT" 
   spec.author       = { "fanwj" => "fwj7493@163.com" }
   spec.source       = { :git => "https://github.com/ugpass/LSVideoCapture.git", :tag => spec.version }
-  spec.platform     = :ios
+  spec.platform     = :ios, '12.0'
   spec.source_files  = "VideoCapture", "VideoCapture/*.{h,m}"   
 
 end
