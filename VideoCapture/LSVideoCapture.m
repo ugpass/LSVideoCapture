@@ -12,6 +12,8 @@
 
 @property (nonatomic, strong) AVCaptureSession *captureSession;
 
+@property (nonatomic, strong) dispatch_queue_t captureSessionQueue;
+
 @property (nonatomic, strong) AVCaptureVideoDataOutput *videoDataOutput;
 
 @property (nonatomic, strong) dispatch_queue_t videoCaptureQueue;
@@ -149,6 +151,13 @@
             @(kCVPixelFormatType_32ARGB), nil];
 }
 
+- (dispatch_queue_t)captureSessionQueue {
+    if (!_captureSessionQueue) {
+        _captureSessionQueue = dispatch_queue_create("ls_capture_session_queue", DISPATCH_QUEUE_SERIAL);
+    }
+    return _captureSessionQueue;
+}
+
 
 - (dispatch_queue_t)videoCaptureQueue {
     if (!_videoCaptureQueue) {
@@ -166,7 +175,7 @@
 - (void)startCaptureWithFps:(NSInteger)fps {
     _willBeRunning = YES;
     _fps = fps;
-    [LSDispatcher dispatchAsyncOnType:LSDispatcherTypeCaptureSession block:^{
+    dispatch_async(self.captureSessionQueue, ^{
         [[UIDevice currentDevice] beginGeneratingDeviceOrientationNotifications];
         
         NSError *error = nil;
@@ -178,18 +187,18 @@
         
         [self updateOrientation];
         //这里是抄webrtc的 暂时没有用上
-//        [self updateDeviceCaptureFormat:format fps:fps];
-//        [self updateVideoDataOutputPixelFormat:format];
+        //        [self updateDeviceCaptureFormat:format fps:fps];
+        //        [self updateVideoDataOutputPixelFormat:format];
         [self.captureSession startRunning];
         self.isRunning = YES;
-    }];
+    });
 }
 
 #pragma mark - stopCapture
 //stopRunning may not be called between calls to beginConfiguration and commitConfiguration
 - (void)stopCaptureWithCompletionHandler:(nullable void (^)(void))completionHandler {
     _willBeRunning = NO;
-    [LSDispatcher dispatchAsyncOnType:LSDispatcherTypeCaptureSession block:^{
+    dispatch_async(self.captureSessionQueue, ^{
         for (AVCaptureDeviceInput *input in self.captureSession.inputs) {
             [self.captureSession removeInput:input];
         }
@@ -198,7 +207,7 @@
         if (completionHandler) {
             completionHandler();
         }
-    }];
+    });
 }
 
 #pragma mark - switchCamera
@@ -272,9 +281,9 @@
 #pragma mark - UIDeviceOrientationDidChangeNotification
 - (void)deviceOrientaionDidChange:(NSNotification *)noti {
     NSLog(@"%s---%ld", __func__, (long)_orientation);
-    [LSDispatcher dispatchAsyncOnType:LSDispatcherTypeCaptureSession block:^{
+    dispatch_async(self.captureSessionQueue, ^{
         [self updateOrientation];
-    }];
+    });
 }
 
 #pragma mark - AVCaptureSessionWasInterruptedNotification
@@ -309,53 +318,53 @@
 
 #pragma mark - handleApplicationDidBecomeActive
 - (void)handleApplicationDidBecomeActive:(NSNotification *)noti {
-    [LSDispatcher dispatchAsyncOnType:LSDispatcherTypeCaptureSession block:^{
+    dispatch_async(self.captureSessionQueue, ^{
         if (self.isRunning && !self.captureSession.isRunning) {
             NSLog(@"restart capture session on active.");
             [self.captureSession startRunning];
         }
-    }];
+    });
 }
 
 #pragma mark -
 - (void)handleCaptureSessionRuntimeError:(NSNotification *)noti {
     NSError *error = [noti.userInfo objectForKey:AVCaptureSessionErrorKey];
     NSLog(@"%s- %@", __func__, error);
-    [LSDispatcher dispatchAsyncOnType:LSDispatcherTypeCaptureSession block:^{
+    dispatch_async(self.captureSessionQueue, ^{
         if (error.code == AVErrorMediaServicesWereReset) {
             [self handleNonFatalError];
         }else {
             [self handleFatalError];
         }
-    }];
+    });
 }
 
 - (void)handleFatalError {
-    [LSDispatcher dispatchAsyncOnType:LSDispatcherTypeCaptureSession block:^{
+    dispatch_async(self.captureSessionQueue, ^{
         if (!self.hasRetriedOnFatalError) {
             [self handleNonFatalError];
             self.hasRetriedOnFatalError = YES;
         }else {
             NSLog(@"retry start with error");
         }
-    }];
+    });
 }
 
 - (void)handleNonFatalError {
-    [LSDispatcher dispatchAsyncOnType:LSDispatcherTypeCaptureSession block:^{
+    dispatch_async(self.captureSessionQueue, ^{
         NSLog(@"restart capture session after error");
         if (self.isRunning) {
             [self.captureSession startRunning];
         }
-    }];
+    });
 }
 
 #pragma mark - AVCaptureSessionDidStartRunningNotification
 - (void)handleCaptureSessionDidStartRunning:(NSNotification *)noti {
-    [LSDispatcher dispatchAsyncOnType:LSDispatcherTypeCaptureSession block:^{
+    dispatch_async(self.captureSessionQueue, ^{
         //start with no error
         self.hasRetriedOnFatalError = NO;
-    }];
+    });
 }
 
 #pragma mark - AVCaptureSessionDidStopRunningNotification
